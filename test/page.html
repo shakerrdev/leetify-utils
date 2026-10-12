@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Leetify</title>
+<style>
+  body { margin: 0; background: #0f1418; color: #e6edf3; font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { padding: 10px 20px; background: #161d22; display: flex; justify-content: flex-end; }
+  header a { color: #e6edf3; text-decoration: none; display: flex; gap: 8px; align-items: center; }
+  main { padding: 20px; }
+  table, [role="table"] { border-collapse: collapse; width: 760px; display: table; }
+  tr, [role="row"] { border-bottom: 1px solid #222b31; display: table-row; }
+  td, [role="cell"] { padding: 8px 10px; display: table-cell; vertical-align: middle; }
+  a.player-meta { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: #3a4650; display: inline-block; }
+  .name { font-weight: 600; min-width: 120px; }
+  app-rank-icon { display: inline-flex; }
+  app-cs-rating, .rating-plate { display: inline-flex; align-items: baseline; padding: 3px 10px; transform: skewX(-12deg); border-left: 3px solid currentColor; background: rgb(255 255 255 / .06); font-weight: 700; font-style: italic; }
+  .label-large, .big { font-size: 15px; }
+  .label-small, .small { font-size: 11px; }
+  .--tier-1 { color: #b0c3d9; } .--tier-2 { color: #5e98d9; } .--tier-3 { color: #4b69ff; } .--tier-4 { color: #8847ff; } .--tier-5 { color: #d32ce6; } .--tier-6 { color: #eb4b4b; } .--tier-7 { color: #ffd700; }
+</style>
+</head>
+<body>
+<header><nav><a class="me" href="/app/profile/76561198000000107"><span>Golf</span><app-cs-rating class="--tier-4"><div class="label-large">17</div><div class="label-small">,016</div></app-cs-rating></a></nav></header>
+<main id="app"></main>
+<script>
+  const DATA = __DATA__;
+  const params = new URLSearchParams(location.search);
+  const LAYOUT = params.get('layout') || 'known';
+  const BADGE_DELAY = Number(params.get('badgeDelay') || 0);
+  const tier = (r) => 1 + [5000, 10000, 15000, 20000, 25000, 30000].filter((t) => r >= t).length;
+
+  function parts(r) {
+    const s = r.toLocaleString('en-US');
+    const cut = s.length > 4 ? s.length - 4 : s.length;
+    return [s.slice(0, cut), s.slice(cut)];
+  }
+
+  function badgeHtml(p, shown) {
+    if (p.type !== 11) return `<app-rank-icon><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="16"></app-rank-icon>`;
+    if (!shown) return '';
+    const [big, small] = parts(shown);
+    if (LAYOUT === 'celltext') return shown.toLocaleString('en-US');
+    if (LAYOUT === 'generic') return `<div class="rating-plate --tier-${tier(shown)}"><span class="big">${big}</span><span class="small">${small}</span></div>`;
+    return `<app-rank-icon><app-cs-rating class="--tier-${tier(shown)}"><div class="label-large">${big}</div><div class="label-small">${small}</div></app-cs-rating></app-rank-icon>`;
+  }
+
+  function href(p) {
+    return LAYOUT === 'vanity' ? `/app/profile/@${encodeURIComponent(p.name.toLowerCase().replace(/\W+/g, ''))}` : `/app/profile/${p.id}`;
+  }
+
+  function matchId() {
+    const m = location.pathname.match(/match-details\/([0-9a-f-]{36})/);
+    return m && m[1];
+  }
+
+  function rowHtml(p, withBadge) {
+    const shown = LAYOUT === 'oldshown' ? p.oldRank : p.rank;
+    const badge = withBadge && LAYOUT !== 'nobadge' ? badgeHtml(p, shown) : '';
+    const extra = `<td class="dmg">${p.rank && p.rank < 1000 ? p.rank : 23}</td><td>${p.name.length}</td>`;
+    if (LAYOUT === 'generic' || LAYOUT === 'celltext') {
+      return `<div role="row"><div role="cell"><a href="${href(p)}"><span class="name">${p.name}</span></a></div><div role="cell" class="rank-cell">${badge}</div><div role="cell">${p.name.length}</div></div>`;
+    }
+    return `<tr data-id="${p.id}"><td class="player-meta-wrapper"><a class="player-meta" href="${href(p)}"><span class="avatar"></span><span class="name">${p.name}</span>${badge}</a></td>${extra}</tr>`;
+  }
+
+  function render() {
+    const app = document.getElementById('app');
+    const id = matchId();
+    if (!id) { app.innerHTML = '<h1>Home</h1><p>Not a match page.</p>'; return; }
+    const players = DATA[id] || [];
+    const late = BADGE_DELAY > 0;
+    const rows = players.map((p) => rowHtml(p, !late)).join('');
+    app.innerHTML = LAYOUT === 'generic' || LAYOUT === 'celltext'
+      ? `<h1>Match ${id.slice(0, 8)}</h1><div role="table" class="scoreboard">${rows}</div>`
+      : `<h1>Match ${id.slice(0, 8)}</h1><table class="scoreboard"><tbody>${rows}</tbody></table><section class="other"><h2>Aim</h2><table><tbody>${players.map((p) => `<tr><td><a href="${href(p)}">${p.name}</a></td><td>${p.name.length}</td></tr>`).join('')}</tbody></table></section>`;
+    if (late) {
+      setTimeout(() => {
+        for (const p of players) {
+          const a = app.querySelector(`tr[data-id="${p.id}"] a.player-meta`);
+          if (a) a.insertAdjacentHTML('beforeend', badgeHtml(p, LAYOUT === 'oldshown' ? p.oldRank : p.rank));
+        }
+      }, BADGE_DELAY);
+    }
+  }
+
+  function reuseTo(path) {
+    history.pushState(null, '', path + location.search);
+    const players = DATA[matchId()] || [];
+    const rows = [...document.querySelectorAll('table.scoreboard tr')];
+    players.forEach((p, i) => {
+      const tr = rows[i];
+      if (!tr) return;
+      tr.dataset.id = p.id;
+      tr.querySelector('a.player-meta').setAttribute('href', href(p));
+      tr.querySelector('.name').textContent = p.name;
+      const cs = tr.querySelector('app-cs-rating');
+      if (cs && p.type === 11 && p.rank) {
+        const [big, small] = parts(p.rank);
+        cs.querySelector('.label-large').textContent = big;
+        cs.querySelector('.label-small').textContent = small;
+      }
+    });
+    rows.slice(players.length).forEach((tr) => tr.remove());
+  }
+
+  window.navigateTo = (path) => { history.pushState(null, '', path + location.search); render(); };
+  window.reuseTo = reuseTo;
+  window.rerender = render;
+  addEventListener('popstate', render);
+  render();
+</script>
+</body>
+</html>
